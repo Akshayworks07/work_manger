@@ -1,0 +1,11 @@
+{
+  "name": "video-delivery-tracker-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix video-tracker run dev",
+    "build": "npm --prefix video-tracker run build",
+    "start": "npm --prefix video-tracker run start",
+    "type-check": "npm --prefix video-tracker run type-check"
+  }
+}
