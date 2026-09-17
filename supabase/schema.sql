@@ -77,45 +77,38 @@ RETURNS BOOLEAN LANGUAGE SQL SECURITY DEFINER SET search_path = public AS $$
 $$;
 
 -- PROFILES POLICIES:
--- Any authenticated user can read profiles (for assignee display & team member list)
 CREATE POLICY "Allow authenticated users to read profiles"
   ON public.profiles FOR SELECT
   TO authenticated
   USING (true);
 
--- Users can update their own profile
 CREATE POLICY "Allow users to update their own profile"
   ON public.profiles FOR UPDATE
   TO authenticated
   USING (auth.uid() = id);
 
--- Admins can update any profile (e.g. promoting roles)
 CREATE POLICY "Allow admin full access to profiles"
   ON public.profiles FOR ALL
   TO authenticated
   USING (public.is_admin());
 
 -- CLIENTS POLICIES:
--- Admin has full access to all clients
 CREATE POLICY "Admin full access to clients"
   ON public.clients FOR ALL
   TO authenticated
   USING (public.is_admin());
 
--- Client users can read their own client records
 CREATE POLICY "Client read own client record"
   ON public.clients FOR SELECT
   TO authenticated
   USING (owner_id = auth.uid());
 
 -- PROJECTS POLICIES:
--- Admin has full access to all projects
 CREATE POLICY "Admin full access to projects"
   ON public.projects FOR ALL
   TO authenticated
   USING (public.is_admin());
 
--- Client users can read their own client's projects
 CREATE POLICY "Client read own projects"
   ON public.projects FOR SELECT
   TO authenticated
@@ -126,13 +119,11 @@ CREATE POLICY "Client read own projects"
   );
 
 -- VIDEOS POLICIES:
--- Admin has full access to all videos
 CREATE POLICY "Admin full access to videos"
   ON public.videos FOR ALL
   TO authenticated
   USING (public.is_admin());
 
--- Client users can read their own client's videos
 CREATE POLICY "Client read own videos"
   ON public.videos FOR SELECT
   TO authenticated
@@ -144,7 +135,6 @@ CREATE POLICY "Client read own videos"
     )
   );
 
--- Client users can update video status (e.g., approve or request review)
 CREATE POLICY "Client update own videos"
   ON public.videos FOR UPDATE
   TO authenticated
@@ -157,13 +147,11 @@ CREATE POLICY "Client update own videos"
   );
 
 -- KANBAN COLUMNS POLICIES:
--- Admin has full access to columns
 CREATE POLICY "Admin full access to kanban_columns"
   ON public.kanban_columns FOR ALL
   TO authenticated
   USING (public.is_admin());
 
--- Client users can read columns for their projects
 CREATE POLICY "Client read own kanban_columns"
   ON public.kanban_columns FOR SELECT
   TO authenticated
@@ -179,7 +167,6 @@ CREATE POLICY "Client read own kanban_columns"
 -- AUTOMATED TRIGGERS
 -- ==============================================================================
 
--- Trigger 1: Auto-create profile upon Supabase auth user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
@@ -205,7 +192,6 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- Trigger 2: Auto-create default Kanban columns when a new project is created
 CREATE OR REPLACE FUNCTION public.create_default_kanban_columns()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
@@ -233,18 +219,15 @@ VALUES
   ('deliverables', 'deliverables', false)
 ON CONFLICT (id) DO NOTHING;
 
--- Public read access for thumbnails
 CREATE POLICY "Public read thumbnails"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'thumbnails');
 
--- Authenticated upload access for thumbnails
 CREATE POLICY "Authenticated users can upload thumbnails"
   ON storage.objects FOR INSERT
   TO authenticated
   WITH CHECK (bucket_id = 'thumbnails');
 
--- Authenticated users access for deliverables
 CREATE POLICY "Authenticated users can manage deliverables"
   ON storage.objects FOR ALL
   TO authenticated
