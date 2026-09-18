@@ -17,8 +17,16 @@ import {
   CheckCircle2,
   Clock,
   Calendar,
+  Trash2,
 } from "lucide-react";
-import { fetchClients, fetchProjects, fetchAllVideos, createProjectRecord } from "@/lib/data-store";
+import {
+  fetchClients,
+  fetchProjects,
+  fetchAllVideos,
+  createProjectRecord,
+  deleteProjectRecord,
+} from "@/lib/data-store";
+import { useApp } from "@/lib/providers";
 import { Project, ProjectStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,8 +53,11 @@ type ProjectFormValues = z.infer<typeof projectSchema>;
 export default function ClientDetailPage() {
   const params = useParams();
   const clientId = params.clientId as string;
+  const { profile } = useApp();
   const queryClient = useQueryClient();
+  const isAdmin = profile?.role === "admin";
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
@@ -91,6 +102,16 @@ export default function ClientDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setIsCreateOpen(false);
       reset();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (projectId: string) => deleteProjectRecord(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["all-videos"] });
+      setProjectToDelete(null);
     },
   });
 
@@ -144,9 +165,11 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shrink-0">
-            <Plus className="h-4 w-4" /> New Production Project
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shrink-0">
+              <Plus className="h-4 w-4" /> New Production Project
+            </Button>
+          )}
         </div>
       </div>
 
@@ -232,12 +255,26 @@ export default function ClientDetailPage() {
                       <Calendar className="h-3 w-3" /> Created {formatDate(project.created_at)}
                     </span>
 
-                    <Link href={`/projects/${project.id}`}>
-                      <Button size="sm" className="gap-2">
-                        <span>Open Kanban Board</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setProjectToDelete(project)}
+                          className="gap-1.5"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      )}
+
+                      <Link href={`/projects/${project.id}`}>
+                        <Button size="sm" className="gap-2">
+                          <span>Open Kanban Board</span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );
@@ -327,6 +364,49 @@ export default function ClientDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Project Confirmation Dialog (ADMIN ONLY) */}
+      <Dialog
+        open={!!projectToDelete}
+        onOpenChange={(open) => !open && setProjectToDelete(null)}
+      >
+        <DialogContent onClose={() => setProjectToDelete(null)}>
+          <DialogHeader>
+            <DialogTitle>Delete this project?</DialogTitle>
+            <p className="text-sm text-slate-300 mt-2">
+              Are you sure you want to delete{" "}
+              <strong className="text-white">
+                &ldquo;{projectToDelete?.name}&rdquo;
+              </strong>
+              ?
+            </p>
+            <p className="text-xs text-rose-400 mt-1">
+              This action cannot be undone.
+            </p>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setProjectToDelete(null)}
+              disabled={deleteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() =>
+                projectToDelete && deleteMutation.mutate(projectToDelete.id)
+              }
+              isLoading={deleteMutation.isPending}
+            >
+              Delete Project
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

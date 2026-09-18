@@ -38,26 +38,33 @@ export default function DashboardLayout({
     router.push("/login");
   };
 
-  const navItems = [
+  const isAdmin = profile?.role === "admin";
+
+  const allNavItems = [
     {
-      name: "Overview",
+      name: isAdmin ? "Overview" : "My Work & Pipeline",
       href: "/",
       icon: LayoutDashboard,
       active: pathname === "/",
+      adminOnly: false,
     },
     {
       name: "Clients",
       href: "/clients",
       icon: Users,
       active: pathname.startsWith("/clients"),
+      adminOnly: true,
     },
     {
       name: "Settings",
       href: "/settings",
       icon: Settings,
       active: pathname.startsWith("/settings"),
+      adminOnly: false,
     },
   ];
+
+  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
@@ -70,9 +77,9 @@ export default function DashboardLayout({
           </div>
           <div>
             <h1 className="text-sm font-bold tracking-tight text-white">
-              MotionCraft
+              Work Manager
             </h1>
-            <p className="text-[11px] text-slate-400">Video Delivery Tracker</p>
+            <p className="text-[11px] text-slate-400">Video & Task Operations</p>
           </div>
         </div>
 
@@ -132,16 +139,16 @@ export default function DashboardLayout({
               />
             ) : (
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-600/30 text-xs font-bold text-purple-300">
-                {(profile?.full_name || profile?.email || "U").charAt(0).toUpperCase()}
+                {(profile?.full_name || profile?.username || "U").charAt(0).toUpperCase()}
               </div>
             )}
             <div className="flex-1 min-w-0">
               <p className="truncate text-xs font-semibold text-white">
-                {profile?.full_name || "Studio Producer"}
+                {profile?.full_name || "Team Member"}
               </p>
               <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                <ShieldCheck className="h-3 w-3 text-purple-400" />
-                <span className="capitalize">{profile?.role || "admin"}</span>
+                <ShieldCheck className={cn("h-3 w-3", isAdmin ? "text-purple-400" : "text-blue-400")} />
+                <span className="capitalize">{isAdmin ? "Admin" : "Team-mate"}</span>
               </div>
             </div>
             <button

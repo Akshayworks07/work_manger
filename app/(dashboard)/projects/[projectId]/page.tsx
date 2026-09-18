@@ -15,6 +15,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { fetchProjectDetails } from "@/lib/data-store";
+import { useApp } from "@/lib/providers";
 import { Board } from "@/components/kanban/Board";
 import { Button } from "@/components/ui/button";
 
@@ -32,6 +33,9 @@ export default function ProjectKanbanPage() {
   const columns = data?.columns || [];
   const videos = data?.videos || [];
 
+  const { profile } = useApp();
+  const isAdmin = profile?.role === "admin";
+
   const deliveredCount = videos.filter((v) => v.status === "delivered").length;
   const inProgressCount = videos.filter((v) => v.status === "in_progress").length;
   const percentage =
@@ -43,20 +47,35 @@ export default function ProjectKanbanPage() {
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Link
-              href="/clients"
-              className="hover:text-white transition-colors"
-            >
-              Clients
-            </Link>
+            {isAdmin ? (
+              <Link
+                href="/clients"
+                className="hover:text-white transition-colors"
+              >
+                Clients
+              </Link>
+            ) : (
+              <Link
+                href="/"
+                className="hover:text-white transition-colors"
+              >
+                Dashboard
+              </Link>
+            )}
             <span>/</span>
             {project?.client ? (
-              <Link
-                href={`/clients/${project.client.id}`}
-                className="hover:text-white transition-colors text-purple-400"
-              >
-                {project.client.name}
-              </Link>
+              isAdmin ? (
+                <Link
+                  href={`/clients/${project.client.id}`}
+                  className="hover:text-white transition-colors text-purple-400"
+                >
+                  {project.client.name}
+                </Link>
+              ) : (
+                <span className="text-purple-400 font-medium">
+                  {project.client.name}
+                </span>
+              )
             ) : (
               <span>Client</span>
             )}

@@ -3,10 +3,21 @@ import { Client, Project, Video, KanbanColumn, Profile } from "./types";
 export const MOCK_PROFILE: Profile = {
   id: "00000000-0000-0000-0000-000000000001",
   full_name: "Alex Morgan (Studio Lead)",
+  username: "alex",
   email: "alex@motioncraft.studio",
   role: "admin",
   avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
   created_at: new Date().toISOString(),
+};
+
+export const MOCK_TEAM_MATE: Profile = {
+  id: "00000000-0000-0000-0000-000000000002",
+  full_name: "Sam Taylor (Video Editor)",
+  username: "samtaylor",
+  email: "sam@motioncraft.studio",
+  role: "team-mate",
+  avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+  created_at: "2026-02-01T10:00:00Z",
 };
 
 export const MOCK_CLIENTS: Client[] = [
@@ -117,7 +128,7 @@ export const MOCK_VIDEOS: Video[] = [
     project_id: "p1111111-1111-1111-1111-111111111111",
     title: "15s Vertical Shorts (3 Cutdowns for TikTok)",
     status: "in_progress",
-    assigned_to: "00000000-0000-0000-0000-000000000001",
+    assigned_to: "00000000-0000-0000-0000-000000000002",
     thumbnail_url: "https://images.unsplash.com/photo-1536240478700-b869070f9279?w=400&auto=format&fit=crop&q=80",
     due_date: "2026-09-25",
     delivered_at: null,
@@ -153,7 +164,7 @@ export const MOCK_VIDEOS: Video[] = [
     project_id: "p2222222-2222-2222-2222-222222222222",
     title: "Episode 1: 'Sprint Against The Clock'",
     status: "delivered",
-    assigned_to: "00000000-0000-0000-0000-000000000001",
+    assigned_to: "00000000-0000-0000-0000-000000000002",
     thumbnail_url: "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=400&auto=format&fit=crop&q=80",
     due_date: "2026-02-15",
     delivered_at: "2026-02-14T14:00:00Z",
@@ -189,7 +200,7 @@ export const MOCK_VIDEOS: Video[] = [
     project_id: "p4444444-4444-4444-4444-444444444444",
     title: "NovaSphere X1 Flight Testing Teaser",
     status: "review",
-    assigned_to: "00000000-0000-0000-0000-000000000001",
+    assigned_to: "00000000-0000-0000-0000-000000000002",
     thumbnail_url: "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=400&auto=format&fit=crop&q=80",
     due_date: "2026-09-24",
     delivered_at: null,

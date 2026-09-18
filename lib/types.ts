@@ -1,8 +1,9 @@
-export type UserRole = "admin" | "client";
+export type UserRole = "admin" | "team-mate";
 
 export interface Profile {
   id: string;
   full_name: string | null;
+  username: string;
   email: string;
   role: UserRole;
   avatar_url: string | null;

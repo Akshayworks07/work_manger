@@ -3,18 +3,20 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Film, Lock, Mail, User, Shield, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Film, Lock, User, AtSign, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { registerDemoUser } from "@/lib/data-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 
 export default function SignUpPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "client">("admin");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,25 +25,63 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    const cleanUsername = username.trim().toLowerCase();
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setError("Username must be at least 3 characters long");
+      return;
+    }
+
+    if (!/^[a-z0-9_.-]+$/.test(cleanUsername)) {
+      setError("Username may only contain letters, numbers, underscores, and dots");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      // Generated secure internal auth email for Supabase Auth account
+      const authEmail = `${cleanUsername}@workmanager.internal`;
+
       if (!isSupabaseConfigured()) {
-        setSuccess("Account configured! Redirecting to dashboard preview...");
+        // Register in demo preview store
+        registerDemoUser({
+          id: "u-" + Date.now(),
+          full_name: fullName.trim(),
+          username: cleanUsername,
+          email: authEmail,
+          role: "team-mate",
+          avatar_url: null,
+          created_at: new Date().toISOString(),
+        });
+
+        setSuccess("Account created successfully as Team-mate! Redirecting to dashboard...");
         setTimeout(() => {
           router.push("/");
-        }, 1200);
+          router.refresh();
+        }, 1000);
         return;
       }
 
       const supabase = createClient();
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: authEmail,
         password,
         options: {
           data: {
-            full_name: fullName,
-            role,
+            full_name: fullName.trim(),
+            username: cleanUsername,
+            // Role is strictly hardcoded as 'team-mate' by DB trigger
           },
         },
       });
@@ -56,8 +96,11 @@ export default function SignUpPage() {
         router.push("/");
         router.refresh();
       } else {
-        setSuccess("Account created! Please check your email to confirm your sign up, then log in.");
+        setSuccess("Account registered! You can now log in with your username and password.");
         setIsLoading(false);
+        setTimeout(() => {
+          router.push("/login");
+        }, 1500);
       }
     } catch (err: any) {
       setError(err?.message || "An unexpected error occurred during signup");
@@ -77,10 +120,10 @@ export default function SignUpPage() {
             <Film className="h-7 w-7 text-white" />
           </div>
           <h2 className="mt-6 text-2xl font-bold tracking-tight text-white">
-            Create an Account
+            Create Team Account
           </h2>
           <p className="mt-2 text-sm text-slate-400">
-            Get started with Video Delivery Tracker
+            Register as a Team-mate to access your assigned video projects
           </p>
         </div>
 
@@ -108,7 +151,7 @@ export default function SignUpPage() {
                 <Input
                   id="full-name"
                   type="text"
-                  placeholder="Alex Morgan"
+                  placeholder="e.g. John Doe"
                   className="pl-9"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -118,31 +161,31 @@ export default function SignUpPage() {
             </div>
 
             <div>
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="username">Username</Label>
               <div className="relative mt-1.5">
-                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="producer@studio.com"
+                  id="username"
+                  type="text"
+                  placeholder="e.g. johndoe"
                   className="pl-9"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   required
                 />
               </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Used to log into your account. Alphanumeric characters only.
+              </p>
             </div>
 
             <div>
               <Label htmlFor="password">Password</Label>
               <div className="relative mt-1.5">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                <Input
+                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500 z-10" />
+                <PasswordInput
                   id="password"
-                  type="password"
                   placeholder="At least 6 characters"
-                  minLength={6}
-                  className="pl-9"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -151,22 +194,17 @@ export default function SignUpPage() {
             </div>
 
             <div>
-              <Label htmlFor="role">Initial Account Role</Label>
+              <Label htmlFor="confirm-password">Confirm Password</Label>
               <div className="relative mt-1.5">
-                <Shield className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                <select
-                  id="role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as "admin" | "client")}
-                  className="flex h-9 w-full rounded-lg border border-slate-700/80 bg-slate-900/80 pl-9 pr-3 py-1 text-sm text-slate-100 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
-                >
-                  <option value="admin">Admin / Video Studio Producer</option>
-                  <option value="client">Client (Reviewer / Brand Lead)</option>
-                </select>
+                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500 z-10" />
+                <PasswordInput
+                  id="confirm-password"
+                  placeholder="Re-enter your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Admins have full project management and kanban access.
-              </p>
             </div>
 
             <Button
@@ -174,7 +212,7 @@ export default function SignUpPage() {
               className="w-full mt-3 h-10 font-semibold"
               isLoading={isLoading}
             >
-              Sign Up <ArrowRight className="ml-2 h-4 w-4" />
+              Create Account <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
         </div>
@@ -186,7 +224,7 @@ export default function SignUpPage() {
             href="/login"
             className="font-medium text-purple-400 hover:text-purple-300 transition-colors"
           >
-            Sign in instead
+            Sign in with Username
           </Link>
         </p>
       </div>

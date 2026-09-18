@@ -9,6 +9,7 @@ import {
   Profile,
   DashboardStats,
   VideoStatus,
+  UserRole,
 } from "./types";
 import {
   MOCK_CLIENTS,
@@ -16,6 +17,7 @@ import {
   MOCK_VIDEOS,
   DEFAULT_COLUMNS,
   MOCK_PROFILE,
+  MOCK_TEAM_MATE,
 } from "./mock-data";
 
 // In-memory / localStorage cache for demo mode
@@ -23,6 +25,7 @@ let localClients = [...MOCK_CLIENTS];
 let localProjects = [...MOCK_PROJECTS];
 let localVideos = [...MOCK_VIDEOS];
 let localColumns = [...DEFAULT_COLUMNS];
+let localRegisteredProfiles = [MOCK_PROFILE, MOCK_TEAM_MATE];
 
 function getStoredState<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -63,17 +66,84 @@ export async function getCurrentProfile(): Promise<Profile> {
     .single();
 
   if (error || !data) {
+    const fallbackUsername =
+      user.user_metadata?.username ||
+      user.email?.split("@")[0] ||
+      "user";
+
     return {
       id: user.id,
-      full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
+      full_name:
+        user.user_metadata?.full_name || fallbackUsername,
+      username: fallbackUsername,
       email: user.email || "",
-      role: (user.user_metadata?.role as "admin" | "client") || "admin",
+      role: (user.user_metadata?.role as UserRole) || "team-mate",
       avatar_url: user.user_metadata?.avatar_url || null,
       created_at: user.created_at,
     };
   }
 
   return data as Profile;
+}
+
+export function setDemoProfile(profile: Profile): void {
+  setStoredState("profile", profile);
+}
+
+// Securely resolves a username to its associated account email for Supabase Auth
+export async function getUserEmailByUsername(username: string): Promise<string | null> {
+  const cleanUsername = username.trim().toLowerCase();
+  if (!cleanUsername) return null;
+
+  // If user already typed an email address, return it
+  if (cleanUsername.includes("@")) {
+    return cleanUsername;
+  }
+
+  const isLive = isSupabaseConfigured();
+  if (!isLive) {
+    const storedProfiles = getStoredState("registered_profiles", localRegisteredProfiles);
+    const matched = storedProfiles.find(
+      (p) => p.username.toLowerCase() === cleanUsername
+    );
+    return matched ? matched.email : null;
+  }
+
+  try {
+    const supabase = createClient();
+    // 1. Check profiles table with case-insensitive match
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("email")
+      .ilike("username", cleanUsername)
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data?.email) {
+      return data.email;
+    }
+
+    // 2. Fallback to security-definer helper RPC function
+    const { data: rpcEmail, error: rpcError } = await supabase.rpc(
+      "get_email_by_username",
+      { p_username: cleanUsername }
+    );
+    if (!rpcError && rpcEmail) {
+      return rpcEmail;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn("Username lookup failed:", err);
+    return null;
+  }
+}
+
+export function registerDemoUser(profile: Profile): void {
+  const stored = getStoredState("registered_profiles", localRegisteredProfiles);
+  const updated = [profile, ...stored.filter((p) => p.username !== profile.username)];
+  setStoredState("registered_profiles", updated);
+  setStoredState("profile", profile);
 }
 
 export async function fetchClients(): Promise<Client[]> {
@@ -123,11 +193,21 @@ export async function createClientRecord(client: Omit<Client, "id" | "created_at
   return data as Client;
 }
 
-export async function fetchProjects(clientId?: string): Promise<Project[]> {
+export async function fetchProjects(clientId?: string, forUserId?: string): Promise<Project[]> {
   const isLive = isSupabaseConfigured();
   if (!isLive) {
-    const all = getStoredState("projects", localProjects);
-    return clientId ? all.filter((p) => p.client_id === clientId) : all;
+    let all = getStoredState("projects", localProjects);
+    if (clientId) {
+      all = all.filter((p) => p.client_id === clientId);
+    }
+    if (forUserId) {
+      const allVideos = getStoredState("videos", localVideos);
+      const userProjectIds = new Set(
+        allVideos.filter((v) => v.assigned_to === forUserId).map((v) => v.project_id)
+      );
+      all = all.filter((p) => userProjectIds.has(p.id));
+    }
+    return all;
   }
 
   try {
@@ -146,8 +226,11 @@ export async function fetchProjects(clientId?: string): Promise<Project[]> {
     return data || [];
   } catch (err) {
     console.warn("Falling back to local projects:", err);
-    const all = getStoredState("projects", localProjects);
-    return clientId ? all.filter((p) => p.client_id === clientId) : all;
+    let all = getStoredState("projects", localProjects);
+    if (clientId) {
+      all = all.filter((p) => p.client_id === clientId);
+    }
+    return all;
   }
 }
 
@@ -190,6 +273,31 @@ export async function createProjectRecord(project: {
 
   if (error) throw error;
   return data as Project;
+}
+
+export async function deleteProjectRecord(projectId: string): Promise<void> {
+  const isLive = isSupabaseConfigured();
+  if (!isLive) {
+    const projects = getStoredState("projects", localProjects);
+    const updatedProjects = projects.filter((p) => p.id !== projectId);
+    setStoredState("projects", updatedProjects);
+    localProjects = updatedProjects;
+
+    // Cascade delete associated deliverables
+    const videos = getStoredState("videos", localVideos);
+    const updatedVideos = videos.filter((v) => v.project_id !== projectId);
+    setStoredState("videos", updatedVideos);
+    localVideos = updatedVideos;
+    return;
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", projectId);
+
+  if (error) throw error;
 }
 
 export async function fetchProjectDetails(projectId: string): Promise<{
@@ -245,21 +353,46 @@ export async function fetchProjectDetails(projectId: string): Promise<{
 export async function fetchAllVideos(): Promise<Video[]> {
   const isLive = isSupabaseConfigured();
   if (!isLive) {
-    return getStoredState("videos", localVideos);
+    const rawVideos = getStoredState("videos", localVideos);
+    const rawProjects = getStoredState("projects", localProjects);
+    const rawClients = getStoredState("clients", localClients);
+    const storedProfiles = getStoredState("registered_profiles", localRegisteredProfiles);
+
+    return rawVideos.map((v) => {
+      const proj = rawProjects.find((p) => p.id === v.project_id);
+      const client = proj ? rawClients.find((c) => c.id === proj.client_id) : undefined;
+      const assignee = storedProfiles.find((p) => p.id === v.assigned_to) || null;
+
+      return {
+        ...v,
+        project: proj ? { ...proj, client } : undefined,
+        assignee,
+      };
+    });
   }
 
   try {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("videos")
-      .select("*, project:projects(*, client:clients(*))")
+      .select("*, project:projects(*, client:clients(*)), assignee:profiles(*)")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
     return data || [];
   } catch (err) {
     console.warn("Falling back to local videos:", err);
-    return getStoredState("videos", localVideos);
+    const rawVideos = getStoredState("videos", localVideos);
+    const rawProjects = getStoredState("projects", localProjects);
+    const rawClients = getStoredState("clients", localClients);
+    return rawVideos.map((v) => {
+      const proj = rawProjects.find((p) => p.id === v.project_id);
+      const client = proj ? rawClients.find((c) => c.id === proj.client_id) : undefined;
+      return {
+        ...v,
+        project: proj ? { ...proj, client } : undefined,
+      };
+    });
   }
 }
 
@@ -368,7 +501,7 @@ export async function deleteVideoRecord(videoId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStats(userProfile?: Profile | null): Promise<DashboardStats> {
   const [clients, projects, videos] = await Promise.all([
     fetchClients(),
     fetchProjects(),

@@ -3,15 +3,20 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Film, Lock, Mail, ArrowRight, Sparkles, AlertCircle } from "lucide-react";
+import { Film, Lock, AtSign, ArrowRight, Sparkles, AlertCircle, Shield, User } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getUserEmailByUsername, setDemoProfile } from "@/lib/data-store";
+import { MOCK_PROFILE, MOCK_TEAM_MATE } from "@/lib/mock-data";
+import { useApp } from "@/lib/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const { refreshProfile } = useApp();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,36 +26,82 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
+    const cleanUsername = username.trim().toLowerCase();
+
+    if (!cleanUsername) {
+      setError("Please enter your username");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       if (!isSupabaseConfigured()) {
-        // In demo preview mode without live Supabase credentials, route directly into dashboard
+        // Demo mode lookup
+        const email = await getUserEmailByUsername(cleanUsername);
+        if (!email && cleanUsername !== "alex" && cleanUsername !== "samtaylor") {
+          setError("Invalid username or password");
+          setIsLoading(false);
+          return;
+        }
+
+        // Set demo user profile
+        if (cleanUsername === "samtaylor") {
+          setDemoProfile(MOCK_TEAM_MATE);
+        } else {
+          setDemoProfile(MOCK_PROFILE);
+        }
+
+        await refreshProfile();
         router.push("/");
         router.refresh();
         return;
       }
 
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Live Supabase Auth: resolve username -> account email
+      const accountEmail = await getUserEmailByUsername(cleanUsername);
 
-      if (signInError) {
-        setError(signInError.message);
+      if (!accountEmail) {
+        setError("Invalid username or password");
         setIsLoading(false);
         return;
       }
 
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: accountEmail,
+        password,
+      });
+
+      if (signInError) {
+        setError("Invalid username or password");
+        setIsLoading(false);
+        return;
+      }
+
+      await refreshProfile();
       router.push("/");
       router.refresh();
     } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred");
+      setError(err?.message || "An error occurred during login");
       setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = () => {
+  const handleQuickDemo = async (role: "admin" | "team-mate") => {
+    if (role === "admin") {
+      setDemoProfile(MOCK_PROFILE);
+    } else {
+      setDemoProfile(MOCK_TEAM_MATE);
+    }
+    await refreshProfile();
     router.push("/");
+    router.refresh();
   };
 
   return (
@@ -65,10 +116,10 @@ export default function LoginPage() {
             <Film className="h-7 w-7 text-white" />
           </div>
           <h2 className="mt-6 text-2xl font-bold tracking-tight text-white">
-            Video Delivery Tracker
+            Work Manager
           </h2>
           <p className="mt-2 text-sm text-slate-400">
-            Sign in to manage client projects, kanban boards & deliverables
+            Sign in with your username to access projects and deliverables
           </p>
         </div>
 
@@ -83,16 +134,17 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <Label htmlFor="email">Work Email</Label>
+              <Label htmlFor="username">Username</Label>
               <div className="relative mt-1.5">
-                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="producer@studio.com"
+                  id="username"
+                  type="text"
+                  placeholder="e.g. alex or samtaylor"
                   className="pl-9"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
                   required
                 />
               </div>
@@ -103,14 +155,13 @@ export default function LoginPage() {
                 <Label htmlFor="password">Password</Label>
               </div>
               <div className="relative mt-1.5">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                <Input
+                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500 z-10" />
+                <PasswordInput
                   id="password"
-                  type="password"
                   placeholder="••••••••"
-                  className="pl-9"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
                   required
                 />
               </div>
@@ -121,20 +172,34 @@ export default function LoginPage() {
               className="w-full mt-2 h-10 font-semibold"
               isLoading={isLoading}
             >
-              Sign In <ArrowRight className="ml-2 h-4 w-4" />
+              Login <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
 
-          {/* Quick Demo Mode Login */}
+          {/* Quick Demo Preview Switcher */}
           <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <button
-              onClick={handleDemoLogin}
-              type="button"
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-purple-500/40 bg-purple-950/20 px-4 py-2.5 text-xs font-medium text-purple-300 hover:bg-purple-900/30 hover:border-purple-400 transition-all"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-purple-400" />
-              Explore Instant Preview (Demo Studio Lead)
-            </button>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center mb-3">
+              1-Click Demo Testing
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleQuickDemo("admin")}
+                type="button"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-950/20 px-3 py-2 text-xs font-medium text-purple-300 hover:bg-purple-900/30 transition-colors"
+              >
+                <Shield className="h-3.5 w-3.5 text-purple-400" />
+                As Admin
+              </button>
+
+              <button
+                onClick={() => handleQuickDemo("team-mate")}
+                type="button"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-950/20 px-3 py-2 text-xs font-medium text-blue-300 hover:bg-blue-900/30 transition-colors"
+              >
+                <User className="h-3.5 w-3.5 text-blue-400" />
+                As Team-mate
+              </button>
+            </div>
           </div>
         </div>
 
@@ -145,7 +210,7 @@ export default function LoginPage() {
             href="/signup"
             className="font-medium text-purple-400 hover:text-purple-300 transition-colors"
           >
-            Create an account
+            Create a Team-mate account
           </Link>
         </p>
       </div>

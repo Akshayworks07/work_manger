@@ -21,6 +21,9 @@ import {
 } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
 
+import { useApp } from "@/lib/providers";
+import { ShieldAlert } from "lucide-react";
+
 const clientSchema = z.object({
   name: z.string().min(2, "Client name must be at least 2 characters"),
   contact_email: z.string().email("Please enter a valid email address").or(z.literal("")),
@@ -30,14 +33,35 @@ const clientSchema = z.object({
 type ClientFormValues = z.infer<typeof clientSchema>;
 
 export default function ClientsPage() {
+  const { profile } = useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
+  const isAdmin = profile?.role === "admin";
+
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients"],
     queryFn: fetchClients,
+    enabled: isAdmin,
   });
+
+  if (profile && !isAdmin) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center p-8">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 mb-4">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Access Denied</h2>
+        <p className="text-sm text-slate-400 mt-2 max-w-md">
+          Client directory management is restricted to Administrators. Team-mates can access projects and deliverables assigned to them directly from their dashboard.
+        </p>
+        <Link href="/" className="mt-6">
+          <Button variant="outline">Return to My Dashboard</Button>
+        </Link>
+      </div>
+    );
+  }
 
   const {
     register,
